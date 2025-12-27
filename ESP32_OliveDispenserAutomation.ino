@@ -89,75 +89,83 @@ void MotorControl(uint8_t activeDirection, uint8_t passiveDirection, uint8_t sen
 
 void processJsonCommand(char *jsonString)
 {
+  char reply[120];
   const nx_json *root = nx_json_parse(jsonString, 0);
   if (!root) 
   {
     Serial.println("Parse error!");
     return;
   }
-  char reply[120];
-  const nx_json *insertOlive = nx_json_get(root, "INSERT_OLIVE");
-  if (insertOlive && insertOlive->type == NX_JSON_STRING)
+  
+  if (strcmp(jsonString, "INSERT_OLIVE") == 0)
   {
-    if (strcmp(insertOlive->text_value, "INSERT_OLIVE") == 0)
+    const nx_json *insertOlive = nx_json_get(root, "INSERT_OLIVE");
+    if (insertOlive && insertOlive->type == NX_JSON_STRING)
     {
       bool sensorStatus = InsertOlive_Motor();
       if (sensorStatus)
       {
         sprintf(reply, "{\"INSERT_OLIVE\":\"OK\"}\r\n");
       }
-      // else
-      // {
-      //   sprintf(reply, "{\"INSERT_OLIVE\":\"NOT_OK\"}\r\n");
-      // }
+      else
+      {
+        sprintf(reply, "{\"INSERT_OLIVE\":\"NOT_OK\"}\r\n");
+      }
 
       Serial.print(reply);
     }
+    if(insertOlive) free(insertOlive);
   }
-    
-  const nx_json *upperdoor = nx_json_get(root, "UPPER_DOOR");
-if (upperdoor && upperdoor->type == NX_JSON_STRING)
-{
-  bool doorStatus = false; 
-  if (strcmp(upperdoor->text_value, "OPEN") == 0)
+  else if (strcmp(jsonString, "UPPER_DOOR") == 0)
   {
-    MotorControl(UPPERMOTOR_IN1_Pin, UPPERMOTOR_IN2_Pin, UPPERDOOR_OPEN_SW, HIGH, default_UPPER_Open, "UpperDoor Open");
-    doorStatus = UPPERDoor_Open();
-    sprintf(reply, "{\"UPPER_DOOR\":\"%s\"}\r\n", doorStatus ? "OPEN" : "NOT_OK");
-    Serial.print(reply);
+    const nx_json *upperdoor = nx_json_get(root, "UPPER_DOOR");
+    if (upperdoor && upperdoor->type == NX_JSON_STRING)
+    {
+      bool doorStatus = false; 
+      if (strcmp(upperdoor->text_value, "OPEN") == 0)
+      {
+        MotorControl(UPPERMOTOR_IN1_Pin, UPPERMOTOR_IN2_Pin, UPPERDOOR_OPEN_SW, HIGH, default_UPPER_Open, "UpperDoor Open");
+        doorStatus = UPPERDoor_Open();
+        sprintf(reply, "{\"UPPER_DOOR\":\"%s\"}\r\n", doorStatus ? "OPEN" : "NOT_OK");
+        Serial.print(reply);
+      }
+      else if (strcmp(upperdoor->text_value, "CLOSE") == 0)
+      {
+        MotorControl(UPPERMOTOR_IN2_Pin, UPPERMOTOR_IN1_Pin, UPPERDOOR_CLOSE_SW, LOW, default_UPPER_Close, "UpperDoor Close");
+        doorStatus = UPPERDoor_Close();
+        sprintf(reply, "{\"UPPER_DOOR\":\"%s\"}\r\n", doorStatus ? "CLOSE" : "NOT_OK");
+        Serial.print(reply);
+      }
+    }
+    if(upperdoor) free(upperdoor);
   }
-  else if (strcmp(upperdoor->text_value, "CLOSE") == 0)
+  else if (strcmp(jsonString, "LOWER_DOOR") == 0)
   {
-    MotorControl(UPPERMOTOR_IN2_Pin, UPPERMOTOR_IN1_Pin, UPPERDOOR_CLOSE_SW, LOW, default_UPPER_Close, "UpperDoor Close");
-    doorStatus = UPPERDoor_Close();
-    sprintf(reply, "{\"UPPER_DOOR\":\"%s\"}\r\n", doorStatus ? "CLOSE" : "NOT_OK");
-    Serial.print(reply);
+    const nx_json *lowerdoor = nx_json_get(root, "LOWER_DOOR");
+    bool doorStatus = false;
+    if (lowerdoor && lowerdoor->type == NX_JSON_STRING)
+    {
+      if (strcmp(lowerdoor->text_value, "OPEN") == 0)
+      {
+        MotorControl(LOWERMOTOR_IN3_Pin, LOWERMOTOR_IN4_Pin, LOWERDOOR_OPEN_SW,HIGH, default_Lower_Open, "LowerDoor Open");
+        doorStatus = LOWERDoor_Open();
+        sprintf(reply, "{\"LOWER_DOOR\":\"%s\"}\r\n", doorStatus ? "OPEN" : "NOT_OK");
+        Serial.print(reply);
+      }
+      else if (strcmp(lowerdoor->text_value, "CLOSE") == 0)
+      {
+        digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
+        digitalWrite(LOWERMOTOR_IN4_Pin, HIGH);          
+        delay(default_Lower_Close);
+        digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
+        digitalWrite(LOWERMOTOR_IN4_Pin, LOW);
+        doorStatus = true; 
+        sprintf(reply, "{\"LOWER_DOOR\":\"%s\"}\r\n", doorStatus ? "CLOSE" : "NOT_OK");
+        Serial.print(reply);
+      }
+    }
+    if(lowerdoor) free(lowerdoor);
   }
-}
-
-const nx_json *lowerdoor = nx_json_get(root, "LOWER_DOOR");
-if (lowerdoor && lowerdoor->type == NX_JSON_STRING)
-{
-  bool doorStatus = false;
-  if (strcmp(lowerdoor->text_value, "OPEN") == 0)
-  {
-    MotorControl(LOWERMOTOR_IN3_Pin, LOWERMOTOR_IN4_Pin, LOWERDOOR_OPEN_SW,HIGH, default_Lower_Open, "LowerDoor Open");
-    doorStatus = LOWERDoor_Open();
-    sprintf(reply, "{\"LOWER_DOOR\":\"%s\"}\r\n", doorStatus ? "OPEN" : "NOT_OK");
-    Serial.print(reply);
-  }
-  else if (strcmp(lowerdoor->text_value, "CLOSE") == 0)
-  {
-    digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
-    digitalWrite(LOWERMOTOR_IN4_Pin, HIGH);
-    delay(default_Lower_Close);
-    digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
-    digitalWrite(LOWERMOTOR_IN4_Pin, LOW);
-    doorStatus = true; 
-    sprintf(reply, "{\"LOWER_DOOR\":\"%s\"}\r\n", doorStatus ? "CLOSE" : "NOT_OK");
-    Serial.print(reply);
-  }
-}
   nx_json_free(root);
 }
 
