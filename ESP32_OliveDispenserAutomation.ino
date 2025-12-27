@@ -97,7 +97,7 @@ void processJsonCommand(char *jsonString)
     return;
   }
   
-  if (strcmp(jsonString, "INSERT_OLIVE") == 0)
+  if (strstr(jsonString, "INSERT_OLIVE") != NULL)
   {
     const nx_json *insertOlive = nx_json_get(root, "INSERT_OLIVE");
     if (insertOlive && insertOlive->type == NX_JSON_STRING)
@@ -114,9 +114,8 @@ void processJsonCommand(char *jsonString)
 
       Serial.print(reply);
     }
-    if(insertOlive) free(insertOlive);
   }
-  else if (strcmp(jsonString, "UPPER_DOOR") == 0)
+  else if (strstr(jsonString, "UPPER_DOOR") != NULL)
   {
     const nx_json *upperdoor = nx_json_get(root, "UPPER_DOOR");
     if (upperdoor && upperdoor->type == NX_JSON_STRING)
@@ -137,9 +136,8 @@ void processJsonCommand(char *jsonString)
         Serial.print(reply);
       }
     }
-    if(upperdoor) free(upperdoor);
   }
-  else if (strcmp(jsonString, "LOWER_DOOR") == 0)
+  else if (strstr(jsonString, "LOWER_DOOR") != NULL)
   {
     const nx_json *lowerdoor = nx_json_get(root, "LOWER_DOOR");
     bool doorStatus = false;
@@ -164,7 +162,6 @@ void processJsonCommand(char *jsonString)
         Serial.print(reply);
       }
     }
-    if(lowerdoor) free(lowerdoor);
   }
   nx_json_free(root);
 }
