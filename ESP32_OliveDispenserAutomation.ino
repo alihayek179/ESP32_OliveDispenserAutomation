@@ -9,11 +9,11 @@ bool checkCommand = false;
 
 uint32_t default_UPPER_Open = 10000;
 uint32_t default_UPPER_Close = 6300;
-uint32_t default_Lower_Open = 1200;
+uint32_t default_Lower_Open = 10000;
 uint32_t default_Lower_Close = 723;
 
 const int B_1A_Pin = 19;
-const int UPPERMOTOR_IN1_Pin = 12;
+const int UPPERMOTOR_IN1_Pin = 12; 
 const int UPPERMOTOR_IN2_Pin = 14;
 const int LOWERMOTOR_IN3_Pin = 26;
 const int LOWERMOTOR_IN4_Pin = 27;
@@ -37,6 +37,7 @@ bool UPPERDoor_Close()
 
 bool LOWERDoor_Open()
 {
+
   return digitalRead(LOWERDOOR_OPEN_SW) == HIGH;
 }
 
@@ -64,7 +65,7 @@ bool InsertOlive_Motor(void)
   return sensor_answer;
 }
 
-void MotorControl(uint8_t activeDirection, uint8_t passiveDirection, uint8_t sensorPin, int sensorStatus, uint32_t maxTime, const char* name )
+bool MotorControl(uint8_t activeDirection, uint8_t passiveDirection, uint8_t sensorPin, int sensorStatus, uint32_t maxTime, const char* name )
 {
   digitalWrite(activeDirection, HIGH);
   digitalWrite(passiveDirection, LOW);
@@ -75,8 +76,12 @@ void MotorControl(uint8_t activeDirection, uint8_t passiveDirection, uint8_t sen
   {
     if (digitalRead(sensorPin) == sensorStatus)
     {
-      status = true;
-      break;
+      delayMicroseconds(50);
+      if (digitalRead(sensorPin) == sensorStatus)
+      {
+        status = true;
+        break;
+      }
     }
   }
   digitalWrite(activeDirection, LOW);
@@ -85,6 +90,7 @@ void MotorControl(uint8_t activeDirection, uint8_t passiveDirection, uint8_t sen
   {
     Serial.printf("WARNING: %s timeout\n", name);
   }
+  return status;
 }
 
 void processJsonCommand(char *jsonString)
@@ -123,15 +129,13 @@ void processJsonCommand(char *jsonString)
       bool doorStatus = false; 
       if (strcmp(upperdoor->text_value, "OPEN") == 0)
       {
-        MotorControl(UPPERMOTOR_IN1_Pin, UPPERMOTOR_IN2_Pin, UPPERDOOR_OPEN_SW, HIGH, default_UPPER_Open, "UpperDoor Open");
-        doorStatus = UPPERDoor_Open();
+        doorStatus = MotorControl(UPPERMOTOR_IN1_Pin, UPPERMOTOR_IN2_Pin, UPPERDOOR_OPEN_SW, HIGH, default_UPPER_Open, "UpperDoor Open");
         sprintf(reply, "{\"UPPER_DOOR\":\"%s\"}\r\n", doorStatus ? "OPEN" : "NOT_OK");
         Serial.print(reply);
       }
       else if (strcmp(upperdoor->text_value, "CLOSE") == 0)
       {
-        MotorControl(UPPERMOTOR_IN2_Pin, UPPERMOTOR_IN1_Pin, UPPERDOOR_CLOSE_SW, LOW, default_UPPER_Close, "UpperDoor Close");
-        doorStatus = UPPERDoor_Close();
+        doorStatus = MotorControl(UPPERMOTOR_IN2_Pin, UPPERMOTOR_IN1_Pin, UPPERDOOR_CLOSE_SW, LOW, default_UPPER_Close, "UpperDoor Close");
         sprintf(reply, "{\"UPPER_DOOR\":\"%s\"}\r\n", doorStatus ? "CLOSE" : "NOT_OK");
         Serial.print(reply);
       }
@@ -145,8 +149,7 @@ void processJsonCommand(char *jsonString)
     {
       if (strcmp(lowerdoor->text_value, "OPEN") == 0)
       {
-        MotorControl(LOWERMOTOR_IN3_Pin, LOWERMOTOR_IN4_Pin, LOWERDOOR_OPEN_SW,HIGH, default_Lower_Open, "LowerDoor Open");
-        doorStatus = LOWERDoor_Open();
+        doorStatus = MotorControl(LOWERMOTOR_IN3_Pin, LOWERMOTOR_IN4_Pin, LOWERDOOR_OPEN_SW,HIGH, default_Lower_Open, "LowerDoor Open");
         sprintf(reply, "{\"LOWER_DOOR\":\"%s\"}\r\n", doorStatus ? "OPEN" : "NOT_OK");
         Serial.print(reply);
       }
