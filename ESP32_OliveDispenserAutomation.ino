@@ -10,7 +10,7 @@ bool checkCommand = false;
 uint32_t default_UPPER_Open = 10000;
 uint32_t default_UPPER_Close = 6300;
 uint32_t default_Lower_Open = 10000;
-uint32_t default_Lower_Close = 723;
+uint32_t default_Lower_Close = 10000;
 
 const int B_1A_Pin = 19;
 const int UPPERMOTOR_IN1_Pin = 12; 
@@ -21,6 +21,7 @@ const int LOWERMOTOR_IN4_Pin = 27;
 const int UPPERDOOR_OPEN_SW = 13;
 const int UPPERDOOR_CLOSE_SW = 32;
 const int LOWERDOOR_OPEN_SW = 35;
+const int LOWERDOOR_CLOSE_SW = 18;
 const int DETECT_SENSOR_IN1 = 25;
 const int DETECT_SENSOR_IN2 = 36;
 
@@ -39,6 +40,11 @@ bool LOWERDoor_Open()
 {
 
   return digitalRead(LOWERDOOR_OPEN_SW) == HIGH;
+}
+
+bool LOWERDoor_Close()
+{
+  return digitalRead(LOWERDOOR_CLOSE_SW) == LOW;
 }
 
 bool oliveDetect()
@@ -155,12 +161,7 @@ void processJsonCommand(char *jsonString)
       }
       else if (strcmp(lowerdoor->text_value, "CLOSE") == 0)
       {
-        digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
-        digitalWrite(LOWERMOTOR_IN4_Pin, HIGH);          
-        delay(default_Lower_Close);
-        digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
-        digitalWrite(LOWERMOTOR_IN4_Pin, LOW);
-        doorStatus = true; 
+        doorStatus = MotorControl(LOWERMOTOR_IN4_Pin, LOWERMOTOR_IN3_Pin, LOWERDOOR_CLOSE_SW,LOW, default_Lower_Close, "LowerDoor Close");
         sprintf(reply, "{\"LOWER_DOOR\":\"%s\"}\r\n", doorStatus ? "CLOSE" : "NOT_OK");
         Serial.print(reply);
       }
@@ -184,6 +185,7 @@ void setup()
   pinMode(UPPERDOOR_OPEN_SW, INPUT);
   pinMode(UPPERDOOR_CLOSE_SW, INPUT);
   pinMode(LOWERDOOR_OPEN_SW, INPUT);
+   pinMode(LOWERDOOR_CLOSE_SW, INPUT);
   pinMode(DETECT_SENSOR_IN1, INPUT);
   pinMode(DETECT_SENSOR_IN2, INPUT);
 
