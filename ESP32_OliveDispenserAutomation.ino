@@ -4,7 +4,11 @@
 
 #define BUFFER_SIZE 250
 #define CSI_BUFFER_SIZE 2048
+#define MAX_CSI_PACKETS 20
 HardwareSerial SerialESP(2); 
+
+uint8_t csiPacketCount = 0;
+bool csiCaptureActive = false; 
 
 char uartBuffer[BUFFER_SIZE];
 uint16_t bufferIndex = 0;
@@ -173,6 +177,19 @@ void processJsonCommand(char *jsonString)
       }
     }
   }
+  else if (strstr(jsonString, "CSI_CAPTURE") != NULL)
+  {
+    const nx_json *csiCmd = nx_json_get(root, "CSI_CAPTURE");
+    if (csiCmd && csiCmd->type == NX_JSON_STRING)
+    {
+      if (strcmp(csiCmd->text_value, "START") == 0)
+      {
+        csiCaptureActive = true;
+        csiPacketCount = 0;
+        Serial.println("{\"CSI_CAPTURE\":\"STARTED\"}");
+      }
+    }
+  }
   nx_json_free(root);
 }
 
@@ -222,7 +239,7 @@ void setup()
 
 void loop()
 {
-  while (SerialESP.available()) 
+  while (SerialESP.available() && csiCaptureActive) 
   {
     char c = SerialESP.read();
     if (csiIndex < CSI_BUFFER_SIZE - 1) 
@@ -234,6 +251,13 @@ void loop()
       csiBuffer[csiIndex - 1] = '\0';
       parseAndSendCSI(csiBuffer);
       csiIndex = 0;
+
+      csiPacketCount++;
+      if (csiPacketCount >= MAX_CSI_PACKETS) 
+      {
+        csiCaptureActive = false;
+        Serial.println("{\"CSI_CAPTURE\":\"DONE\"}");
+      }
     }
   }
   if (Serial.available())
