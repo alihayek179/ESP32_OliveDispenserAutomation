@@ -1,11 +1,17 @@
 #include <Arduino.h>
-#include "nxjson.h"    
+#include "nxjson.h" 
+  
 
 #define BUFFER_SIZE 250
+#define CSI_BUFFER_SIZE 2048
+HardwareSerial SerialESP(2); 
 
 char uartBuffer[BUFFER_SIZE];
 uint16_t bufferIndex = 0;
 bool checkCommand = false;
+
+char csiBuffer[CSI_BUFFER_SIZE];
+uint16_t csiIndex = 0;
 
 uint32_t default_UPPER_Open = 10000;
 uint32_t default_UPPER_Close = 6300;
@@ -170,10 +176,27 @@ void processJsonCommand(char *jsonString)
   nx_json_free(root);
 }
 
+void parseAndSendCSI(char* rawData) 
+{
+  char* startBracket = strchr(rawData, '[');
+  char* endBracket = strrchr(rawData, ']');
+
+  if (startBracket != NULL && endBracket != NULL) 
+  {
+    *(endBracket + 1) = '\0'; 
+    Serial.print("{\"CSI_Data\":\"");
+    char* content = startBracket + 1;
+    *(endBracket) = '\0'; 
+    Serial.print(content); 
+    Serial.println("\"}");
+  }
+}
+
 
 void setup()
 {
   Serial.begin(115200);
+  SerialESP.begin(115200, SERIAL_8N1, 16, 17); 
   delay(300);
   Serial.println("ESP32 TEST\n");
 
@@ -199,6 +222,20 @@ void setup()
 
 void loop()
 {
+  while (SerialESP.available()) 
+  {
+    char c = SerialESP.read();
+    if (csiIndex < CSI_BUFFER_SIZE - 1) 
+    {
+      csiBuffer[csiIndex++] = c;
+    }
+    if (c == '\n') 
+    {
+      csiBuffer[csiIndex - 1] = '\0';
+      parseAndSendCSI(csiBuffer);
+      csiIndex = 0;
+    }
+  }
   if (Serial.available())
   {
     char c = Serial.read();
