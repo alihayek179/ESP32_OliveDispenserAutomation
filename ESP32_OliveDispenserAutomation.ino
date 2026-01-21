@@ -4,7 +4,7 @@
 
 #define BUFFER_SIZE 250
 #define CSI_BUFFER_SIZE 2048
-#define MAX_CSI_PACKETS 20
+#define MAX_CSI_PACKETS 21
 HardwareSerial SerialESP(2); 
 
 uint8_t csiPacketCount = 0;
@@ -21,6 +21,8 @@ uint32_t default_UPPER_Open = 10000;
 uint32_t default_UPPER_Close = 6300;
 uint32_t default_Lower_Open = 10000;
 uint32_t default_Lower_Close = 10000;
+
+const int Power_control_Pin = 15;
 
 const int B_1A_Pin = 19;
 const int UPPERMOTOR_IN1_Pin = 12; 
@@ -179,6 +181,9 @@ void processJsonCommand(char *jsonString)
   }
   else if (strstr(jsonString, "CSI_CAPTURE") != NULL)
   {
+    digitalWrite(Power_control_Pin, HIGH);
+    Serial.println("{\"Power\":\"ON\"}");
+    //delay(300);
     const nx_json *csiCmd = nx_json_get(root, "CSI_CAPTURE");
     if (csiCmd && csiCmd->type == NX_JSON_STRING)
     {
@@ -187,6 +192,23 @@ void processJsonCommand(char *jsonString)
         csiCaptureActive = true;
         csiPacketCount = 0;
         Serial.println("{\"CSI_CAPTURE\":\"STARTED\"}");
+      }
+    }
+  }
+  else if (strstr(jsonString, "Power") != NULL)
+  {
+    const nx_json *csiCmd = nx_json_get(root, "Power");
+    if (csiCmd && csiCmd->type == NX_JSON_STRING)
+    {
+      if (strcmp(csiCmd->text_value, "CLOSE") == 0)
+      {
+        digitalWrite(Power_control_Pin, LOW);
+        Serial.println("{\"Power\":\"OFF\"}");
+      }
+      else if (strcmp(csiCmd->text_value, "OPEN") == 0)
+      {
+        digitalWrite(Power_control_Pin, HIGH);
+        Serial.println("{\"Power\":\"ON\"}");
       }
     }
   }
@@ -217,6 +239,7 @@ void setup()
   delay(300);
   Serial.println("ESP32 TEST\n");
 
+  pinMode(Power_control_Pin, OUTPUT);
   pinMode(B_1A_Pin, OUTPUT);
   pinMode(UPPERMOTOR_IN1_Pin, OUTPUT);
   pinMode(UPPERMOTOR_IN2_Pin, OUTPUT);
@@ -225,7 +248,7 @@ void setup()
   pinMode(UPPERDOOR_OPEN_SW, INPUT);
   pinMode(UPPERDOOR_CLOSE_SW, INPUT);
   pinMode(LOWERDOOR_OPEN_SW, INPUT);
-   pinMode(LOWERDOOR_CLOSE_SW, INPUT);
+  pinMode(LOWERDOOR_CLOSE_SW, INPUT);
   pinMode(DETECT_SENSOR_IN1, INPUT);
   pinMode(DETECT_SENSOR_IN2, INPUT);
 
@@ -233,6 +256,7 @@ void setup()
   digitalWrite(UPPERMOTOR_IN2_Pin, LOW);
   digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
   digitalWrite(LOWERMOTOR_IN4_Pin, LOW);
+  digitalWrite(Power_control_Pin, HIGH);
 
 }
 
