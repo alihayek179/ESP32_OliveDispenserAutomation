@@ -173,6 +173,12 @@ void processJsonCommand(char *jsonString)
       }
       else if (strcmp(lowerdoor->text_value, "CLOSE") == 0)
       {
+        // digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
+        // digitalWrite(LOWERMOTOR_IN4_Pin, HIGH);          
+        // delay(default_Lower_Close);
+        // digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
+        // digitalWrite(LOWERMOTOR_IN4_Pin, LOW);
+        // doorStatus = true; 
         doorStatus = MotorControl(LOWERMOTOR_IN4_Pin, LOWERMOTOR_IN3_Pin, LOWERDOOR_CLOSE_SW,LOW, default_Lower_Close, "LowerDoor Close");
         sprintf(reply, "{\"LOWER_DOOR\":\"%s\"}\r\n", doorStatus ? "CLOSE" : "NOT_OK");
         Serial.print(reply);
@@ -181,9 +187,6 @@ void processJsonCommand(char *jsonString)
   }
   else if (strstr(jsonString, "CSI_CAPTURE") != NULL)
   {
-    digitalWrite(Power_control_Pin, HIGH);
-    Serial.println("{\"Power\":\"ON\"}");
-    //delay(300);
     const nx_json *csiCmd = nx_json_get(root, "CSI_CAPTURE");
     if (csiCmd && csiCmd->type == NX_JSON_STRING)
     {
