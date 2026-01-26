@@ -4,7 +4,7 @@
 
 #define BUFFER_SIZE 250
 #define CSI_BUFFER_SIZE 2048
-#define MAX_CSI_PACKETS 21
+#define MAX_CSI_PACKETS 31
 HardwareSerial SerialESP(2); 
 
 uint8_t csiPacketCount = 0;
@@ -277,6 +277,7 @@ void loop()
     {
       csiBuffer[csiIndex - 1] = '\0';
       parseAndSendCSI(csiBuffer);
+      memset(csiBuffer, 0, CSI_BUFFER_SIZE);
       csiIndex = 0;
 
       csiPacketCount++;
