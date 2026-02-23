@@ -3,7 +3,7 @@
   
 
 #define BUFFER_SIZE 250
-#define CSI_BUFFER_SIZE 2048
+#define CSI_BUFFER_SIZE 8192
 #define MAX_CSI_PACKETS 31
 HardwareSerial SerialESP(2); 
 
@@ -237,8 +237,8 @@ void parseAndSendCSI(char* rawData)
 
 void setup()
 {
-  Serial.begin(115200);
-  SerialESP.begin(115200, SERIAL_8N1, 16, 17); 
+  Serial.begin(500000);
+  SerialESP.begin(500000, SERIAL_8N1, 16, 17); 
   delay(300);
   Serial.println("ESP32 TEST\n");
 
