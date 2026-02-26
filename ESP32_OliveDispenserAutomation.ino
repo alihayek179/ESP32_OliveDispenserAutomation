@@ -94,11 +94,19 @@ bool MotorControl(uint8_t activeDirection, uint8_t passiveDirection, uint8_t sen
   {
     if (digitalRead(sensorPin) == sensorStatus)
     {
-      delayMicroseconds(50);
+      digitalWrite(activeDirection, LOW);
+      digitalWrite(passiveDirection, LOW);
+      delay(300);
       if (digitalRead(sensorPin) == sensorStatus)
       {
         status = true;
         break;
+      }
+      else
+      {
+        Serial.printf("%s false trigger, resuming...\n", name);
+        digitalWrite(activeDirection, HIGH);
+        digitalWrite(passiveDirection, LOW);
       }
     }
   }
