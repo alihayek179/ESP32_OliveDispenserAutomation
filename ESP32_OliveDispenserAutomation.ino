@@ -1,10 +1,12 @@
 #include <Arduino.h>
 #include "nxjson.h" 
+#include <Wire.h>            
+// #include "Adafruit_SHT31.h"
   
 
-#define BUFFER_SIZE 250
+#define BUFFER_SIZE 560
 #define CSI_BUFFER_SIZE 8192
-#define MAX_CSI_PACKETS 31
+#define MAX_CSI_PACKETS 61
 HardwareSerial SerialESP(2); 
 
 uint8_t csiPacketCount = 0;
@@ -37,6 +39,83 @@ const int LOWERDOOR_CLOSE_SW = 18;
 const int DETECT_SENSOR_IN1 = 25;
 const int DETECT_SENSOR_IN2 = 36;
 
+const int SCL_PIN = 22;
+const int SDA_PIN = 21;
+const uint8_t SHT31_ADDR = 0x44;
+
+
+bool readSHT31_Raw(float &temperature)
+{
+  Wire.beginTransmission(SHT31_ADDR);
+  Wire.write(0x24);
+  Wire.write(0x00);  
+  uint8_t writeResult = Wire.endTransmission();
+  if (writeResult != 0)
+  {
+    Serial.printf("readSHT31_Raw: Write failed, code=%d\n", writeResult);
+    return false;
+  }
+  delay(20); 
+  uint8_t n = Wire.requestFrom((uint8_t)SHT31_ADDR, (uint8_t)6);
+  if (n != 6)
+  {
+    Serial.printf("readSHT31_Raw: RequestFrom failed, got %d bytes\n", n);
+    return false;
+  }
+  uint8_t data[6];
+  for (int i = 0; i < 6; i++)
+  {
+    data[i] = Wire.read();
+  }
+  uint16_t rawTemp = (data[0] << 8) | data[1];
+  temperature = -45.0 + 175.0 * ((float)rawTemp / 65535.0);
+  return true;
+}
+
+void I2C_BusRecovery()
+{
+  pinMode(SDA_PIN, INPUT_PULLUP);
+  pinMode(SCL_PIN, OUTPUT);
+
+  for (int i = 0; i < 9; i++)
+  {
+    digitalWrite(SCL_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(SCL_PIN, LOW);
+    delayMicroseconds(10);
+  }
+  digitalWrite(SCL_PIN, HIGH);
+  delayMicroseconds(10);
+
+  pinMode(SDA_PIN, OUTPUT);
+  digitalWrite(SDA_PIN, LOW);
+  delayMicroseconds(10);
+  digitalWrite(SDA_PIN, HIGH);
+  delayMicroseconds(10);
+
+  Wire.begin(SDA_PIN, SCL_PIN);
+}
+
+void ReadandSend_TempValue() 
+{
+  float temp;
+  bool success = readSHT31_Raw(temp);
+  if (!success) 
+  {
+    Serial.println("Could nıt read, next try...");
+    I2C_BusRecovery();
+    delay(50);
+    success = readSHT31_Raw(temp);
+  }
+  if (success) 
+  {
+    Serial.printf("{\"TEMP\":%.2f}\r\n", temp);
+  } 
+  else 
+  {
+    Serial.println("{\"TEMP\":\"ERROR\"}\r\n");
+  }
+}
 
 bool UPPERDoor_Open()
 {
@@ -67,6 +146,7 @@ bool oliveDetect()
 bool InsertOlive_Motor(void)
 {
   digitalWrite(B_1A_Pin, HIGH);
+  // Serial.println("B_1A HIGH");
   uint32_t start = millis();
   uint32_t defaultTime = 5000;
   bool sensor_answer = false;
@@ -80,6 +160,7 @@ bool InsertOlive_Motor(void)
     }
   }
   digitalWrite(B_1A_Pin, LOW);
+  delay(300);
   return sensor_answer;
 }
 
@@ -104,7 +185,7 @@ bool MotorControl(uint8_t activeDirection, uint8_t passiveDirection, uint8_t sen
       }
       else
       {
-        Serial.printf("%s false trigger, resuming...\n", name);
+        //Serial.printf("%s false trigger, resuming...\n", name);
         digitalWrite(activeDirection, HIGH);
         digitalWrite(passiveDirection, LOW);
       }
@@ -129,98 +210,113 @@ void processJsonCommand(char *jsonString)
     return;
   }
   
-  if (strstr(jsonString, "INSERT_OLIVE") != NULL)
+  // if (strstr(jsonString, "INSERT_OLIVE") != NULL)
+  // {
+  const nx_json *insertOlive = nx_json_get(root, "INSERT_OLIVE");
+  if (insertOlive && insertOlive->type == NX_JSON_STRING)
   {
-    const nx_json *insertOlive = nx_json_get(root, "INSERT_OLIVE");
-    if (insertOlive && insertOlive->type == NX_JSON_STRING)
+    bool sensorStatus = InsertOlive_Motor();
+    if (sensorStatus)
     {
-      bool sensorStatus = InsertOlive_Motor();
-      if (sensorStatus)
-      {
-        sprintf(reply, "{\"INSERT_OLIVE\":\"OK\"}\r\n");
-      }
-      else
-      {
-        sprintf(reply, "{\"INSERT_OLIVE\":\"NOT_OK\"}\r\n");
-      }
-
+      sprintf(reply, "{\"INSERT_OLIVE\":\"OK\"}\r\n");
+    }
+    else
+    {
+      sprintf(reply, "{\"INSERT_OLIVE\":\"NOT_OK\"}\r\n");
+    }
+    Serial.print(reply);
+  }
+  // }
+  // else if (strstr(jsonString, "UPPER_DOOR") != NULL)
+  // {
+  const nx_json *upperdoor = nx_json_get(root, "UPPER_DOOR");
+  if (upperdoor && upperdoor->type == NX_JSON_STRING)
+  {
+    bool doorStatus = false; 
+    if (strcmp(upperdoor->text_value, "OPEN") == 0)
+    {
+      doorStatus = MotorControl(UPPERMOTOR_IN1_Pin, UPPERMOTOR_IN2_Pin, UPPERDOOR_OPEN_SW, HIGH, default_UPPER_Open, "UpperDoor Open");
+      sprintf(reply, "{\"UPPER_DOOR\":\"%s\"}\r\n", doorStatus ? "OPEN" : "NOT_OK");
+      Serial.print(reply);
+    }
+    else if (strcmp(upperdoor->text_value, "CLOSE") == 0)
+    {
+      doorStatus = MotorControl(UPPERMOTOR_IN2_Pin, UPPERMOTOR_IN1_Pin, UPPERDOOR_CLOSE_SW, LOW, default_UPPER_Close, "UpperDoor Close");
+      sprintf(reply, "{\"UPPER_DOOR\":\"%s\"}\r\n", doorStatus ? "CLOSE" : "NOT_OK");
       Serial.print(reply);
     }
   }
-  else if (strstr(jsonString, "UPPER_DOOR") != NULL)
+  // }
+  // else if (strstr(jsonString, "LOWER_DOOR") != NULL)
+  // {
+  const nx_json *lowerdoor = nx_json_get(root, "LOWER_DOOR");
+  bool doorStatus = false;
+  if (lowerdoor && lowerdoor->type == NX_JSON_STRING)
   {
-    const nx_json *upperdoor = nx_json_get(root, "UPPER_DOOR");
-    if (upperdoor && upperdoor->type == NX_JSON_STRING)
+    if (strcmp(lowerdoor->text_value, "OPEN") == 0)
     {
-      bool doorStatus = false; 
-      if (strcmp(upperdoor->text_value, "OPEN") == 0)
-      {
-        doorStatus = MotorControl(UPPERMOTOR_IN1_Pin, UPPERMOTOR_IN2_Pin, UPPERDOOR_OPEN_SW, HIGH, default_UPPER_Open, "UpperDoor Open");
-        sprintf(reply, "{\"UPPER_DOOR\":\"%s\"}\r\n", doorStatus ? "OPEN" : "NOT_OK");
-        Serial.print(reply);
-      }
-      else if (strcmp(upperdoor->text_value, "CLOSE") == 0)
-      {
-        doorStatus = MotorControl(UPPERMOTOR_IN2_Pin, UPPERMOTOR_IN1_Pin, UPPERDOOR_CLOSE_SW, LOW, default_UPPER_Close, "UpperDoor Close");
-        sprintf(reply, "{\"UPPER_DOOR\":\"%s\"}\r\n", doorStatus ? "CLOSE" : "NOT_OK");
-        Serial.print(reply);
-      }
+      doorStatus = MotorControl(LOWERMOTOR_IN3_Pin, LOWERMOTOR_IN4_Pin, LOWERDOOR_OPEN_SW,HIGH, default_Lower_Open, "LowerDoor Open");
+      sprintf(reply, "{\"LOWER_DOOR\":\"%s\"}\r\n", doorStatus ? "OPEN" : "NOT_OK");
+      Serial.print(reply);
+    }
+    else if (strcmp(lowerdoor->text_value, "CLOSE") == 0)
+    {
+      // digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
+      // digitalWrite(LOWERMOTOR_IN4_Pin, HIGH);          
+      // delay(default_Lower_Close);
+      // digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
+      // digitalWrite(LOWERMOTOR_IN4_Pin, LOW);
+      // doorStatus = true; 
+      doorStatus = MotorControl(LOWERMOTOR_IN4_Pin, LOWERMOTOR_IN3_Pin, LOWERDOOR_CLOSE_SW,LOW, default_Lower_Close, "LowerDoor Close");
+      sprintf(reply, "{\"LOWER_DOOR\":\"%s\"}\r\n", doorStatus ? "CLOSE" : "NOT_OK");
+      Serial.print(reply);
     }
   }
-  else if (strstr(jsonString, "LOWER_DOOR") != NULL)
+  // }
+  // else if (strstr(jsonString, "CSI_CAPTURE") != NULL)
+  // {
+  const nx_json *csiCmd = nx_json_get(root, "CSI_CAPTURE");
+  if (csiCmd && csiCmd->type == NX_JSON_STRING)
   {
-    const nx_json *lowerdoor = nx_json_get(root, "LOWER_DOOR");
-    bool doorStatus = false;
-    if (lowerdoor && lowerdoor->type == NX_JSON_STRING)
+    if (strcmp(csiCmd->text_value, "START") == 0)
     {
-      if (strcmp(lowerdoor->text_value, "OPEN") == 0)
-      {
-        doorStatus = MotorControl(LOWERMOTOR_IN3_Pin, LOWERMOTOR_IN4_Pin, LOWERDOOR_OPEN_SW,HIGH, default_Lower_Open, "LowerDoor Open");
-        sprintf(reply, "{\"LOWER_DOOR\":\"%s\"}\r\n", doorStatus ? "OPEN" : "NOT_OK");
-        Serial.print(reply);
-      }
-      else if (strcmp(lowerdoor->text_value, "CLOSE") == 0)
-      {
-        // digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
-        // digitalWrite(LOWERMOTOR_IN4_Pin, HIGH);          
-        // delay(default_Lower_Close);
-        // digitalWrite(LOWERMOTOR_IN3_Pin, LOW);
-        // digitalWrite(LOWERMOTOR_IN4_Pin, LOW);
-        // doorStatus = true; 
-        doorStatus = MotorControl(LOWERMOTOR_IN4_Pin, LOWERMOTOR_IN3_Pin, LOWERDOOR_CLOSE_SW,LOW, default_Lower_Close, "LowerDoor Close");
-        sprintf(reply, "{\"LOWER_DOOR\":\"%s\"}\r\n", doorStatus ? "CLOSE" : "NOT_OK");
-        Serial.print(reply);
-      }
+      csiCaptureActive = true;
+      csiPacketCount = 0;
+      Serial.println("{\"CSI_CAPTURE\":\"STARTED\"}");
     }
   }
-  else if (strstr(jsonString, "CSI_CAPTURE") != NULL)
+  // }
+  // else if (strstr(jsonString, "Power") != NULL)
+  // {
+  const nx_json *pwCmd = nx_json_get(root, "Power");
+  if (pwCmd && pwCmd->type == NX_JSON_STRING)
   {
-    const nx_json *csiCmd = nx_json_get(root, "CSI_CAPTURE");
-    if (csiCmd && csiCmd->type == NX_JSON_STRING)
+    if (strcmp(pwCmd->text_value, "CLOSE") == 0)
     {
-      if (strcmp(csiCmd->text_value, "START") == 0)
-      {
-        csiCaptureActive = true;
-        csiPacketCount = 0;
-        Serial.println("{\"CSI_CAPTURE\":\"STARTED\"}");
-      }
+      digitalWrite(Power_control_Pin, LOW);
+      Serial.println("{\"Power\":\"OFF\"}");
+    }
+    else if (strcmp(pwCmd->text_value, "OPEN") == 0)
+    {
+      digitalWrite(Power_control_Pin, HIGH);
+      Serial.println("{\"Power\":\"ON\"}");
     }
   }
-  else if (strstr(jsonString, "Power") != NULL)
+  // }
+  const nx_json *cmdCmd = nx_json_get(root, "CMD");
+  if (cmdCmd && cmdCmd->type == NX_JSON_STRING)
   {
-    const nx_json *csiCmd = nx_json_get(root, "Power");
-    if (csiCmd && csiCmd->type == NX_JSON_STRING)
+      if (strcmp(cmdCmd->text_value, "NOTHING") == 0)
+      {
+          Serial.println("{\"CMD\":\"NOTHING\"}");
+      }
+  }
+  const nx_json *tempCmd = nx_json_get(root, "TEMP");
+  if (tempCmd && tempCmd->type == NX_JSON_STRING)
+  {
+    if (strcmp(tempCmd->text_value, "READ") == 0)
     {
-      if (strcmp(csiCmd->text_value, "CLOSE") == 0)
-      {
-        digitalWrite(Power_control_Pin, LOW);
-        Serial.println("{\"Power\":\"OFF\"}");
-      }
-      else if (strcmp(csiCmd->text_value, "OPEN") == 0)
-      {
-        digitalWrite(Power_control_Pin, HIGH);
-        Serial.println("{\"Power\":\"ON\"}");
-      }
+      ReadandSend_TempValue();
     }
   }
   nx_json_free(root);
@@ -231,24 +327,69 @@ void parseAndSendCSI(char* rawData)
   char* startBracket = strchr(rawData, '[');
   char* endBracket = strrchr(rawData, ']');
 
-  if (startBracket != NULL && endBracket != NULL) 
+  if (startBracket == NULL || endBracket == NULL) 
   {
+    return;
+  }
+  char rssiStr[8] = {0};
+  {
+    char* p = rawData;
+    char* fieldStart = rawData;
+    int fieldIndex = 0;
+
+    while (*p && p < startBracket) 
+    {
+      if (*p == ',') 
+      {
+        if (fieldIndex == 3)   
+        {
+          int len = p - fieldStart;
+          if (len > 0 && len < (int)sizeof(rssiStr)) 
+          {
+            memcpy(rssiStr, fieldStart, len);
+            rssiStr[len] = '\0';
+          }
+          break;
+        }
+        fieldIndex++;
+        fieldStart = p + 1;
+      }
+      p++;
+    }
+  }
+
+  // if (startBracket != NULL && endBracket != NULL) 
+  // {
     *(endBracket + 1) = '\0'; 
-    Serial.print("{\"CSI_Data\":\"");
+    // Serial.print("{\"CSI_Data\":\"");
     char* content = startBracket + 1;
     *(endBracket) = '\0'; 
-    Serial.print(content); 
-    Serial.println("\"}");
-  }
+  //   Serial.print(content); 
+  //   Serial.println("\"}");
+  // }
+
+  Serial.print("\"RSSI\":");
+  Serial.print(rssiStr[0] ? rssiStr : "null");
+  Serial.print(",\"CSI_Data\":\"");
+  Serial.print(content); 
+  Serial.println("\"}");
 }
 
 
 void setup()
 {
-  Serial.begin(500000);
-  SerialESP.begin(500000, SERIAL_8N1, 16, 17); 
+  Serial.begin(115200);//500000
+  Serial.setRxBufferSize(1024);
+  SerialESP.begin(115200, SERIAL_8N1, 16, 17);//500000, SERIAL_8N1, 16, 17); 
+
   delay(300);
-  Serial.println("ESP32 TEST\n");
+
+  Wire.begin(SDA_PIN, SCL_PIN);
+  Wire.beginTransmission(SHT31_ADDR);
+  if (Wire.endTransmission() != 0)
+  {
+    Serial.println("{\"TEMP_SENSOR\":\"NOT_FOUND\"}\r\n");
+  }
 
   pinMode(Power_control_Pin, OUTPUT);
   pinMode(B_1A_Pin, OUTPUT);
@@ -277,6 +418,8 @@ void loop()
   while (SerialESP.available() && csiCaptureActive) 
   {
     char c = SerialESP.read();
+    Serial.print(c);
+
     if (csiIndex < CSI_BUFFER_SIZE - 1) 
     {
       csiBuffer[csiIndex++] = c;
@@ -296,7 +439,33 @@ void loop()
       }
     }
   }
-  if (Serial.available())
+  // int csiReadCount = 0;
+  // while (SerialESP.available() && csiCaptureActive && csiReadCount < 256) 
+  // {
+  //   char c = SerialESP.read();
+  //   csiReadCount++;
+  //   if (csiIndex < CSI_BUFFER_SIZE - 1) 
+  //   {
+  //     csiBuffer[csiIndex++] = c;
+  //   }
+  //   if (c == '\n') 
+  //   {
+  //     csiBuffer[csiIndex - 1] = '\0';
+  //     parseAndSendCSI(csiBuffer);
+  //     memset(csiBuffer, 0, CSI_BUFFER_SIZE);
+  //     csiIndex = 0;
+
+  //     csiPacketCount++;
+  //     if (csiPacketCount >= MAX_CSI_PACKETS) 
+  //     {
+  //       csiCaptureActive = false;
+  //       Serial.println("{\"CSI_CAPTURE\":\"DONE\"}");
+  //     }
+  //     break; 
+  //   }
+  // }
+
+  while (Serial.available())
   {
     char c = Serial.read();
     uartBuffer[bufferIndex++] = c;
